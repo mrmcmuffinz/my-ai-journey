@@ -1,0 +1,10 @@
+version: 2
+ethernets:
+  ${iface_nat}:
+    dhcp4: true
+  ${iface_host}:
+    dhcp4: no
+    addresses:
+      - ${ip_address}/24
+    # No gateway here: this is an internal, host-only network
+    # VMs on the same 192.168.50.0/24 can still talk to each other L2.
