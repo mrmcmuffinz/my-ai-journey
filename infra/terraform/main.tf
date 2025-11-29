@@ -100,9 +100,9 @@ resource "libvirt_domain" "nodes" {
   }
 }
 
-resource "time_sleep" "wait_for_nodes_900s" {
+resource "time_sleep" "wait_for_nodes_600s" {
   depends_on = [libvirt_domain.nodes]
-  create_duration = "900s"
+  create_duration = "600s"
 }
 
 locals {
