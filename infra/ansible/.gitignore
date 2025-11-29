@@ -1,0 +1,26 @@
+# Generic caches
+.cache/
+cache/
+tmp/
+*.cache
+
+# Python / virtualenv
+.venv/
+venv/
+.env/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+pip-wheel-metadata/
+dist/
+build/
+
+# Ansible runtime & logs
+ansible.log
+*.retry
+.retry
+.ansible/
+.cache/ansible/
+.fact_cache/
+ansible_tmp/
