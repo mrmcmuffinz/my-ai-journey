@@ -1,10 +1,20 @@
 version: 2
 ethernets:
-  ${iface_nat}:
+  # Bridged LAN NIC (br0) — DHCP, should get 192.168.2.x
+  lan0:
+    match:
+      macaddress: ${mac_lan}
+    set-name: ens3
     dhcp4: true
-  ${iface_host}:
+
+  # Host-only / NAT NIC (hostnet) — static 192.168.50.x
+  host0:
+    match:
+      macaddress: ${mac_hostnet}
+    set-name: ens4
     dhcp4: no
     addresses:
       - ${ip_address}/24
-    # No gateway here: this is an internal, host-only network
-    # VMs on the same 192.168.50.0/24 can still talk to each other L2.
+    # No gateway here: internal host-only network
+    # VMs on 192.168.50.0/24 can still talk L2.
+

@@ -14,6 +14,7 @@ EOT
     ip_address = string
     role       = string    # "control-plane" or "worker"
     mac        = string
+    hostnet_mac = string
   }))
 
   default = {
@@ -24,6 +25,7 @@ EOT
       ip_address = "192.168.50.10"
       role       = "control-plane"
       mac        = "34:97:F6:AA:BB:C0"
+      hostnet_mac = "52:54:00:b2:ce:4f"
     }
     wk1 = {
       memory     = 8192
@@ -32,6 +34,7 @@ EOT
       ip_address = "192.168.50.11"
       role       = "worker"
       mac        = "34:97:F6:AA:BB:C1"
+      hostnet_mac = "52:54:00:b2:ce:50"
     }
     wk2 = {
       memory     = 8192
@@ -40,6 +43,7 @@ EOT
       ip_address = "192.168.50.12"
       role       = "worker"
       mac        = "34:97:F6:AA:BB:C2"
+      hostnet_mac = "52:54:00:b2:ce:51"
     }
   }
 }

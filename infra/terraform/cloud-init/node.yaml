@@ -9,6 +9,8 @@ packages:
 
 users:
   - name: txgrid
+    passwd: $6$rounds=4096$AwvmD/RZZy9TY8uQ$rN1n3fmpA3IuAK8WyTiJ.TxnPplCk6JR1ZQiXyt/PWcv4OYubIaI9WsdjbGOaX9gTQ4XYt2D7viO.aexrWYHs.
+    lock_passwd: false
     ssh_authorized_keys:
       - ${ssh_pubkey}
     sudo: ALL=(ALL) NOPASSWD:ALL
@@ -27,5 +29,12 @@ write_files:
     owner: root:root
     content: "${node_role}\n"
 
+bootcmd:
+  - sed -i 's/GRUB_CMDLINE_LINUX="\(.*\)"/GRUB_CMDLINE_LINUX="\1 console=ttyS0,115200n8"/' /etc/default/grub
+  - update-grub
+  - systemctl enable serial-getty@ttyS0.service
+
 runcmd:
-  - [ systemctl, enable, --now, qemu-guest-agent ]
+  - systemctl start serial-getty@ttyS0.service
+  - systemctl enable qemu-guest-agent
+  - systemctl start qemu-guest-agent

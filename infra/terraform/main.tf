@@ -14,25 +14,40 @@ locals {
 #####################################
 resource "libvirt_network" "hostnet" {
   name      = "hostnet"
-  mode      = "none"
-  autostart = true
+  mode      = "nat"
+  #autostart = true
 
-  addresses = [local.hostnet_cidr]
-
-  dhcp {
-    enabled = true
-  }
+  ips = [
+    {
+      address = "192.168.50.1"
+      prefix  = 24
+      dhcp = {
+        enabled = true
+        ranges = [
+          {
+            start = "192.168.50.2"
+            end = "192.168.50.254"
+          }
+        ]
+      }
+    }
+  ]
 }
 
 #####################################
 # Per-node Disks based on the Base Image
 #####################################
 resource "libvirt_volume" "node_disks" {
-  for_each       = var.nodes
+  for_each = var.nodes
 
-  name           = "${each.key}.qcow2"
-  pool           = "default"
-  source         = local.image_url
+  name     = "${each.key}.qcow2"
+  pool     = "default"
+  format   = "qcow2"
+  create   = {
+    content = {
+      url = local.image_url
+    }
+  }
 }
 
 #####################################
@@ -41,9 +56,12 @@ resource "libvirt_volume" "node_disks" {
 resource "libvirt_cloudinit_disk" "node_ci" {
   for_each = var.nodes
   name     = "${each.key}-seed.iso"
-  pool     = "default"
 
-  # Single generic node cloud-init template
+  meta_data = templatefile("${local.cloud_init_dir}/meta.yaml.tmpl", {
+    instance_id = each.key
+    hostname    = each.key
+  })
+
   user_data = templatefile("${local.cloud_init_dir}/node.yaml", {
     ssh_pubkey = file(var.ssh_pubkey)
     node_name  = each.key
@@ -51,12 +69,31 @@ resource "libvirt_cloudinit_disk" "node_ci" {
     node_ip    = each.value.ip_address
   })
 
-  # Network-config template (still per-node data, same template)
   network_config = templatefile("${local.cloud_init_dir}/net.yaml.tmpl", {
     ip_address = each.value.ip_address
-    iface_nat  = "ens3"
-    iface_host = "ens4"
+    mac_lan     = lower(each.value.mac)          # br0 MAC
+    mac_hostnet = lower(each.value.hostnet_mac)  # hostnet MAC    
   })
+}
+
+#####################################
+# Stable Cloud-init ISO copied into default pool
+# (avoids /tmp ISO + source.volume drift bugs)
+#####################################
+resource "libvirt_volume" "seed_iso" {
+  for_each = var.nodes
+
+  name   = "${each.key}-seed.iso"
+  pool   = "default"
+  format = "iso"
+
+  create = {
+    content = {
+      url = libvirt_cloudinit_disk.node_ci[each.key].path
+    }
+  }
+
+  depends_on = [libvirt_cloudinit_disk.node_ci]
 }
 
 #####################################
@@ -66,47 +103,104 @@ resource "libvirt_domain" "nodes" {
   for_each = var.nodes
 
   name   = "txgrid-${each.key}"
-  vcpu   = each.value.vcpu
+  type   = "kvm"
   memory = each.value.memory
-  qemu_agent = true
+  unit   = "MiB"
+  vcpu   = each.value.vcpu
 
-  # NIC 1 — NAT network (internet access)
-  network_interface {
-    bridge = "br0"
-    mac    = each.value.mac
+  running = true
+  autostart = true
+
+  os = {
+    type    = "hvm"
+    arch    = "x86_64"
+    machine = "q35"
   }
 
-  # NIC 2 — Host-only network
-  network_interface {
-    network_name = libvirt_network.hostnet.name
-  }
+  devices = {
+    disks = [
+      {
+        device = "disk"
+        source = {
+          pool = libvirt_volume.node_disks[each.key].pool
+          volume = libvirt_volume.node_disks[each.key].name
+        }
+        target = {
+          dev = "vda"
+          bus = "virtio"
+        }
+      },
+      {
+        device   = "cdrom"
+        readonly = true
+        source = {
+          pool = libvirt_volume.seed_iso[each.key].pool
+          volume = libvirt_volume.seed_iso[each.key].name
+        }
+        target = {
+          dev = "sda"
+          bus = "sata"
+        }
+      }
+    ]
+  
+    interfaces = [
+      {
+        type   = "bridge"
+        model  = "virtio"
+        mac    = lower(each.value.mac)
+        source = { bridge = "br0" }
+      },
+      {
+        type   = "network"
+        model  = "virtio"
+        mac    = lower(each.value.hostnet_mac)
+        source = { network = libvirt_network.hostnet.name }
+      }
+    ]
 
-  disk {
-    volume_id = libvirt_volume.node_disks[each.key].id
-  }
+    channels = [
+      {
+        type = "unix"
+        target_type = "virtio"
+        target_name = "org.qemu.guest_agent.0"
+      }
+    ]
 
-  cloudinit = libvirt_cloudinit_disk.node_ci[each.key].id
+    #    serials = [
+    #      {
+    #        type = "pty"
+    #        target_port = "0"
+    #      }
+    #    ]
+    #
+    #    consoles = [
+    #      {
+    #        type = "pty"
+    #        target_type = "serial"
+    #        target_port = "0"
+    #      }
+    #    ]
 
-  console {
-    type        = "pty"
-    target_port = "0"
-    target_type = "serial"
-  }
-
-  graphics {
-    type        = "vnc"
-    listen_type = "address"
-    autoport    = true
+    graphics = {
+      spice = {
+        autoport = "yes"
+        listen   = "127.0.0.1"
+      }
+    }
+    video = {
+      type = "virtio"
+    }
   }
 }
 
-resource "time_sleep" "wait_for_nodes_900s" {
+resource "time_sleep" "wait_for_nodes_600s" {
   depends_on = [libvirt_domain.nodes]
-  create_duration = "900s"
+  create_duration = "600s"
 }
 
 locals {
   node_networks = [
-    for n in libvirt_domain.nodes : {(n.name) : (n.network_interface)}
+    for n in libvirt_domain.nodes : n
   ]
 }
