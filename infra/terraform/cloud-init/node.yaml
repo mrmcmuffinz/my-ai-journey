@@ -1,11 +1,24 @@
 #cloud-config
 package_update: true
-package_upgrade: false
+package_upgrade: true
+ssh_pwauth: false
+disable_root: true
+hostname: ${node_name}
+manage_etc_hosts: true
 
 packages:
-  - qemu-guest-agent
+  - ca-certificates
+  - curl
+  - gpg
+  - net-tools
+  - nmap
   - python3
   - python3-apt
+  - qemu-guest-agent
+  - vim
+
+mounts:
+  - [ swap, '' ]
 
 users:
   - name: txgrid
@@ -14,18 +27,17 @@ users:
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: /bin/bash
 
-ssh_pwauth: false
-disable_root: true
-
-hostname: ${node_name}
-manage_etc_hosts: true
-
-# Optional: drop a tiny file with a "role hint" Ansible can read
 write_files:
-  - path: /etc/txgrid-role
+  - path: /etc/node_role
     permissions: "0644"
     owner: root:root
     content: "${node_role}\n"
 
 runcmd:
   - [ systemctl, enable, --now, qemu-guest-agent ]
+
+power_state:
+  mode: reboot
+  message: Rebooting after initial setup
+  timeout: 30
+  condition: True
